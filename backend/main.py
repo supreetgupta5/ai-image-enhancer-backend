@@ -1,24 +1,30 @@
+import requests
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-import uuid, shutil
+import base64
 
 app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.get("/")
-def home():
-    return {"status": "TEST MODE RUNNING"}
+HF_API_URL = "https://supreetgupta5-ai-image-enhancer.hf.space/run/predict"
 
 @app.post("/enhance")
-async def enhance(file: UploadFile = File(...)):
-    filename = f"output_{uuid.uuid4()}.png"
-    with open(filename, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    return FileResponse(filename, media_type="image/png")
+async def enhance_image(file: UploadFile = File(...)):
+    image_bytes = await file.read()
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+
+    payload = {
+        "data": [
+            f"data:image/png;base64,{image_base64}"
+        ]
+    }
+
+    response = requests.post(HF_API_URL, json=payload)
+
+    if response.status_code != 200:
+        return {"error": "HF Space error"}
+
+    result_base64 = response.json()["data"][0].split(",")[1]
+    result_bytes = base64.b64decode(result_base64)
+
+    return {
+        "image": base64.b64encode(result_bytes).decode("utf-8")
+    }
